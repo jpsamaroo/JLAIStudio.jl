@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Interface</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        #media-modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 10% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 600px;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen flex">
+    <!-- Left Sidebar -->
+    <div class="w-80 gradient-bg text-white p-4 shadow-lg flex flex-col">
+        <h2 class="text-2xl font-bold mb-4">Conversations</h2>
+        <button id="new-chat-button" class="bg-white text-purple-700 py-2 px-4 rounded-lg mb-4 hover:bg-purple-100 transition duration-300">
+            New Chat
+        </button>
+        <ul id="conversation-list" class="space-y-4 custom-scrollbar overflow-y-auto flex-grow">
+            <!-- Conversations will be dynamically added here -->
+        </ul>
+    </div>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col">
+        <!-- Chat Area -->
+        <div id="chat-area" class="flex-1 bg-white p-6 overflow-y-auto custom-scrollbar shadow-inner">
+            <!-- Chat messages will be dynamically added here -->
+        </div>
+
+        <!-- Input Area -->
+        <div class="bg-gray-100 p-6 border-t border-gray-300">
+            <div class="flex items-center space-x-4 mb-4">
+                <input type="file" id="file-input" class="hidden" />
+                <button id="upload-button" class="p-2 bg-gray-200 rounded-full hover:bg-gray-300 transition duration-300">
+                    <i class="fas fa-file-upload text-gray-600"></i>
+                </button>
+                <button id="mic-button" class="p-2 bg-gray-200 rounded-full hover:bg-gray-300 transition duration-300">
+                    <i class="fas fa-microphone text-gray-600"></i>
+                </button>
+                <button id="photo-button" class="p-2 bg-gray-200 rounded-full hover:bg-gray-300 transition duration-300">
+                    <i class="fas fa-camera text-gray-600"></i>
+                </button>
+                <button id="video-button" class="p-2 bg-gray-200 rounded-full hover:bg-gray-300 transition duration-300">
+                    <i class="fas fa-video text-gray-600"></i>
+                </button>
+                <select id="model-select" class="ml-auto p-2 rounded-full border border-gray-300 focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50 transition duration-300">
+
+                </select>
+            </div>
+            <div class="flex space-x-4">
+                <textarea id="user-input" class="flex-1 p-4 rounded-lg border border-gray-300 focus:border-blue-500 focus:ring focus:ring-blue-200 focus:ring-opacity-50 resize-none transition duration-300" rows="3" placeholder="Type your message here..."></textarea>
+                <button id="send-button" class="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-300">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Media Modal -->
+    <div id="media-modal" class="modal">
+        <div class="modal-content rounded-lg">
+            <div class="flex justify-between items-center mb-4">
+                <h2 id="modal-title" class="text-xl font-bold">Media Capture</h2>
+                <button id="close-media" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <video id="media-preview" class="w-full mb-4" autoplay></video>
+            <div id="capture-controls" class="flex justify-between">
+                <button id="capture-media" class="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 transition duration-300">
+                    Capture
+                </button>
+                <button id="stop-video" class="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition duration-300 hidden">
+                    Stop Recording
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const chatArea = document.getElementById('chat-area');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+        const modelSelect = document.getElementById('model-select');
+        const fileInput = document.getElementById('file-input');
+        const uploadButton = document.getElementById('upload-button');
+        const micButton = document.getElementById('mic-button');
+        const photoButton = document.getElementById('photo-button');
+        const videoButton = document.getElementById('video-button');
+        const conversationList = document.getElementById('conversation-list');
+        const newChatButton = document.getElementById('new-chat-button');
+        const mediaModal = document.getElementById('media-modal');
+        const closeMedia = document.getElementById('close-media');
+        const mediaPreview = document.getElementById('media-preview');
+        const captureMedia = document.getElementById('capture-media');
+        const stopVideo = document.getElementById('stop-video');
+        const modalTitle = document.getElementById('modal-title');
+
+        let mediaRecorder;
+        let audioChunks = [];
+        let videoChunks = [];
+        let isRecording = false;
+        let currentConversationId = null;
+        let conversationContent = [];
+        let mediaStream = null;
+        let isVideo = false;
+
+        function addMessageToChat(message, isUser) {
+            message = message.replace(/\n/g, "<br/>");
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `mb-4 ${isUser ? 'text-right' : 'text-left'}`;
+            messageDiv.innerHTML = `
+                <div class="inline-block p-3 rounded-lg ${isUser ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-800'}">
+                    ${message}
+                </div>
+            `;
+            chatArea.appendChild(messageDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        async function sendMessage() {
+            const message = userInput.value.trim();
+            const model = modelSelect.value;
+            if (message && currentConversationId) {
+                addMessageToChat(message, true);
+                userInput.value = '';
+
+                try {
+                    const response = await fetch('/query', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            prompt: message,
+                            model: model,
+                            conversation_id: currentConversationId,
+                            extras: conversationContent,
+                        }),
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        addMessageToChat(data.response, false);
+                        clearConverationContent();
+                        fetchConversations();
+                    } else {
+                        addMessageToChat('Error: Unable to get response from server', false);
+                    }
+                } catch (error) {
+                    addMessageToChat('Error: Unable to connect to server', false);
+                }
+            }
+        }
+
+        sendButton.addEventListener('click', sendMessage);
+        userInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // File upload functionality
+        uploadButton.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    conversationContent.push({ content: e.target.result, kind: 'file', metadata: { name: file.name, type: file.type } });
+                };
+                reader.readAsText(file);
+            }
+        });
+
+        // Audio recording functionality
+        micButton.addEventListener('click', () => {
+            if (!isRecording) {
+                startAudioRecording();
+            } else {
+                stopAudioRecording();
+            }
+        });
+
+        function startAudioRecording() {
+            navigator.mediaDevices.getUserMedia({ audio: true })
+                .then(stream => {
+                    mediaRecorder = new MediaRecorder(stream);
+                    mediaRecorder.start();
+                    isRecording = true;
+                    micButton.style.backgroundColor = 'red';
+
+                    audioChunks = [];
+                    mediaRecorder.addEventListener("dataavailable", event => {
+                        audioChunks.push(event.data);
+                    });
+                });
+        }
+
+        function stopAudioRecording() {
+            mediaRecorder.stop();
+            isRecording = false;
+            micButton.style.backgroundColor = '';
+
+            mediaRecorder.addEventListener("stop", () => {
+                const audioBlob = new Blob(audioChunks);
+                const reader = new FileReader();
+                reader.readAsDataURL(audioBlob);
+                reader.onloadend = () => {
+                    const base64Audio = reader.result.split(',')[1];
+                    conversationContent.push({ content: base64Audio, kind: 'audio' });
+                };
+            });
+        }
+
+        // Fetch and display conversations
+        async function fetchConversations() {
+            try {
+                const response = await fetch('/conversations');
+                if (response.ok) {
+                    const conversations = await response.json();
+                    updateConversationList(conversations);
+                } else {
+                    console.error('Failed to fetch conversations');
+                }
+            } catch (error) {
+                console.error('Error fetching conversations:', error);
+            }
+        }
+
+        function updateConversationList(conversations) {
+            conversationList.innerHTML = '';
+            conversations.forEach(conv => {
+                const li = document.createElement('li');
+                li.className = 'cursor-pointer hover:bg-white hover:bg-opacity-20 p-3 rounded transition duration-300';
+                li.innerHTML = `<div class="font-semibold">${conv.title}</div>`;
+                li.addEventListener('click', () => loadConversation(conv.id));
+                conversationList.appendChild(li);
+            });
+        }
+
+        async function loadConversation(conversationId) {
+            try {
+                const response = await fetch(`/conversation/${conversationId}`);
+                if (response.ok) {
+                    const messages = await response.json();
+                    currentConversationId = conversationId;
+                    chatArea.innerHTML = '';
+                    clearConverationContent();
+                    messages.forEach(msg => addMessageToChat(msg.content, msg.role === 'user'));
+                } else {
+                    console.error('Failed to load conversation');
+                }
+            } catch (error) {
+                console.error('Error loading conversation:', error);
+            }
+        }
+
+        async function createNewConversation() {
+            try {
+                const response = await fetch('/new-conversation', { method: 'POST' });
+                if (response.ok) {
+                    const data = await response.json();
+                    currentConversationId = data.id;
+                    chatArea.innerHTML = '';
+                    clearConverationContent();
+                    fetchConversations();
+                } else {
+                    console.error('Failed to create new conversation');
+                }
+            } catch (error) {
+                console.error('Error creating new conversation:', error);
+            }
+        }
+
+        async function clearConverationContent() {
+            conversationContent = [];
+        }
+
+        newChatButton.addEventListener('click', createNewConversation);
+
+        // Media capture functionality
+        photoButton.addEventListener('click', () => openMediaCapture(false));
+        videoButton.addEventListener('click', () => openMediaCapture(true));
+        closeMedia.addEventListener('click', closeMediaCapture);
+        captureMedia.addEventListener('click', doCaptureMedia);
+        stopVideo.addEventListener('click', stopVideoRecording);
+
+        function openMediaCapture(video) {
+            isVideo = video;
+            mediaModal.style.display = 'block';
+            modalTitle.textContent = video ? 'Video Capture' : 'Photo Capture';
+            captureMedia.textContent = video ? 'Start Recording' : 'Take Photo';
+            stopVideo.classList.toggle('hidden', !video);
+
+            navigator.mediaDevices.getUserMedia({ video: true, audio: video })
+                .then(stream => {
+                    mediaStream = stream;
+                    mediaPreview.srcObject = stream;
+                })
+                .catch(error => {
+                    console.error('Error accessing media devices:', error);
+                    alert('Unable to access camera/microphone. Please make sure you have granted the necessary permissions.');
+                });
+        }
+
+        function closeMediaCapture() {
+            mediaModal.style.display = 'none';
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+            }
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            isRecording = false;
+            stopVideo.classList.add('hidden');
+            captureMedia.textContent = isVideo ? 'Start Recording' : 'Take Photo';
+        }
+
+        function doCaptureMedia() {
+            if (isVideo) {
+                if (!isRecording) {
+                    startVideoRecording();
+                } else {
+                    stopVideoRecording();
+                }
+            } else {
+                takePhoto();
+            }
+        }
+
+        function takePhoto() {
+            const canvas = document.createElement('canvas');
+            canvas.width = mediaPreview.videoWidth;
+            canvas.height = mediaPreview.videoHeight;
+            canvas.getContext('2d').drawImage(mediaPreview, 0, 0);
+            const imageDataUrl = canvas.toDataURL('image/jpeg');
+            const base64Image = imageDataUrl.split(',')[1]; // Base64-encoded image data
+            conversationContent.push({ content: base64Image, kind: 'image' });
+            closeMediaCapture();
+        }
+
+        function startVideoRecording() {
+            videoChunks = [];
+            mediaRecorder = new MediaRecorder(mediaStream);
+            mediaRecorder.start();
+            isRecording = true;
+            captureMedia.textContent = 'Stop Recording';
+            stopVideo.classList.remove('hidden');
+
+            mediaRecorder.addEventListener('dataavailable', event => {
+                videoChunks.push(event.data);
+            });
+
+            mediaRecorder.addEventListener('stop', () => {
+                const videoBlob = new Blob(videoChunks, { type: 'video/webm' });
+                const reader = new FileReader();
+                reader.readAsDataURL(videoBlob);
+                reader.onloadend = () => {
+                    const base64Video = reader.result.split(',')[1];
+                    conversationContent.push({ content: base64Video, kind: 'video' });
+                };
+                closeMediaCapture();
+            });
+        }
+
+        function stopVideoRecording() {
+            if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                mediaRecorder.stop();
+            }
+            isRecording = false;
+            captureMedia.textContent = 'Start Recording';
+            stopVideo.classList.add('hidden');
+        }
+
+        // Fetch available models and populate the dropdown
+        async function fetchAndPopulateModels() {
+            try {
+                const response = await fetch('/models');
+                if (response.ok) {
+                    const models = await response.json();
+                    populateModelDropdown(models);
+                } else {
+                    console.error('Failed to fetch models');
+                }
+                modelSelect.value = 'gpt-4';
+            } catch (error) {
+                console.error('Error fetching models:', error);
+            }
+        }
+
+        function populateModelDropdown(models) {
+            modelSelect.innerHTML = '<option value="default">Select model</option>';
+            models.forEach(model => {
+                const option = document.createElement('option');
+                option.value = option.textContent = model;
+                modelSelect.appendChild(option);
+            });
+        }
+
+        // Fetch conversations every 5 seconds
+        setInterval(fetchConversations, 5000);
+
+        // Initial fetches and setup
+        fetchConversations();
+        createNewConversation();
+        fetchAndPopulateModels();
+    </script>
+</body>
+</html>
