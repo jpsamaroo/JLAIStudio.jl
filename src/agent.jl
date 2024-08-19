@@ -15,6 +15,7 @@ end
 # FIXME: Automate this
 load_api_key(model_name::String) = load_api_key(load_model(model_name))
 load_api_key(model::PTModel) = load_api_key(model.schema)
+load_api_key(::PT.AbstractPromptSchema) = ""
 load_api_key(::PT.OpenAISchema) = PT.OPENAI_API_KEY
 load_api_key(::PT.AnthropicSchema) = PT.ANTHROPIC_API_KEY
 load_api_key(::PT.GroqOpenAISchema) = PT.GROQ_API_KEY
