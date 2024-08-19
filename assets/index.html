@@ -65,6 +65,9 @@
             <!-- Chat messages will be dynamically added here -->
         </div>
 
+        <!-- Extra Content Area -->
+        <div id="extra-content-area" class="mb-2"></div>
+
         <!-- Input Area -->
         <div class="bg-gray-100 p-6 border-t border-gray-300">
             <div class="flex items-center space-x-4 mb-4">
@@ -115,6 +118,14 @@
         </div>
     </div>
 
+    <div id="content-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span id="close-content-modal" class="close">&times;</span>
+            <h2 id="content-modal-title"></h2>
+            <div id="content-modal-body"></div>
+        </div>
+    </div>
+
     <script>
         const chatArea = document.getElementById('chat-area');
         const userInput = document.getElementById('user-input');
@@ -134,21 +145,122 @@
         const stopVideo = document.getElementById('stop-video');
         const modalTitle = document.getElementById('modal-title');
 
+        const extraContentArea = document.getElementById('extra-content-area');
+        const contentModal = document.getElementById('content-modal');
+        const contentModalTitle = document.getElementById('content-modal-title');
+        const contentModalBody = document.getElementById('content-modal-body');
+        const closeContentModal = document.getElementById('close-content-modal');
+
         let mediaRecorder;
         let audioChunks = [];
         let videoChunks = [];
         let isRecording = false;
         let currentConversationId = null;
-        let conversationContent = [];
+        let extraContents = [];
         let mediaStream = null;
         let isVideo = false;
 
-        function addMessageToChat(message, isUser) {
+        function addExtraContent(kind, data, fileName = null) {
+            const contentId = Date.now();
+            extraContents.push({ id: contentId, kind, data, fileName });
+            updateExtraContentButtons();
+        }
+
+        function updateExtraContentButtons() {
+            extraContentArea.innerHTML = '';
+            extraContents.forEach(content => {
+                const button = document.createElement('button');
+                button.className = 'extra-content-button';
+                button.innerHTML = `
+                    <i class="fas fa-${getIconForContentKind(content.kind)}"></i>
+                    ${content.kind}${content.fileName ? ': ' + content.fileName : ''}
+                    <span class="remove-content" data-id="${content.id}">&times;</span>
+                `;
+                button.addEventListener('click', () => showContentModal(content));
+                extraContentArea.appendChild(button);
+            });
+
+            if (extraContents.length > 0) {
+                extraContentArea.classList.remove('hidden');
+            } else {
+                extraContentArea.classList.add('hidden');
+            }
+
+            // Add event listeners for remove buttons
+            document.querySelectorAll('.remove-content').forEach(button => {
+                button.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    removeExtraContent(parseInt(button.dataset.id));
+                });
+            });
+        }
+
+        function removeExtraContent(id) {
+            extraContents = extraContents.filter(content => content.id !== id);
+            updateExtraContentButtons();
+        }
+
+        function getIconForContentKind(kind) {
+            switch (kind) {
+                case 'File': return 'file';
+                case 'Audio': return 'microphone';
+                case 'Image': return 'image';
+                case 'Video': return 'video';
+                default: return 'question';
+            }
+        }
+
+        function showContentModal(content) {
+            contentModalTitle.textContent = `${content.kind}${content.fileName ? ': ' + content.fileName : ''}`;
+            contentModalBody.innerHTML = '';
+
+            switch (content.kind) {
+                case 'File':
+                    contentModalBody.innerHTML = content.data.replace(/\n/g, "<br/>");
+                    break;
+                case 'Audio':
+                    const audio = document.createElement('audio');
+                    audio.controls = true;
+                    audio.src = `data:audio/wav;base64,${content.data}`;
+                    contentModalBody.appendChild(audio);
+                    break;
+                case 'Image':
+                    const img = document.createElement('img');
+                    img.src = `data:image/jpeg;base64,${content.data}`;
+                    contentModalBody.appendChild(img);
+                    break;
+                case 'Video':
+                    const video = document.createElement('video');
+                    video.controls = true;
+                    video.src = `data:video/webm;base64,${content.data}`;
+                    contentModalBody.appendChild(video);
+                    break;
+            }
+
+            contentModal.style.display = 'block';
+        }
+
+        closeContentModal.addEventListener('click', () => {
+            contentModal.style.display = 'none';
+        });
+
+        function addMessageToChat(message, isUser, extraContents = []) {
             message = message.replace(/\n/g, "<br/>");
             const messageDiv = document.createElement('div');
             messageDiv.className = `mb-4 ${isUser ? 'text-right' : 'text-left'}`;
+
+            let extraContentHTML = '';
+            extraContents.forEach(content => {
+                extraContentHTML += `
+                    <i class="fas fa-${getIconForContentKind(content.kind)}"></i>
+                    ${content.kind}${content.fileName ? ': ' + content.fileName : ''}
+                    <br/>
+                `;
+            });
+
             messageDiv.innerHTML = `
                 <div class="inline-block p-3 rounded-lg ${isUser ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-800'}">
+                    <div class="extra-content-area">${extraContentHTML}</div>
                     ${message}
                 </div>
             `;
@@ -159,9 +271,8 @@
         async function sendMessage() {
             const message = userInput.value.trim();
             const model = modelSelect.value;
-            if (message && currentConversationId) {
-                addMessageToChat(message, true);
-                userInput.value = '';
+            if ((message || extraContents.length > 0) && currentConversationId) {
+                addMessageToChat(message, true, extraContents);
 
                 try {
                     const response = await fetch('/query', {
@@ -173,14 +284,19 @@
                             prompt: message,
                             model: model,
                             conversation_id: currentConversationId,
-                            extras: conversationContent,
+                            extras: extraContents
                         }),
                     });
 
                     if (response.ok) {
                         const data = await response.json();
                         addMessageToChat(data.response, false);
+
+                        // Clear content
+                        userInput.value = '';
                         clearConverationContent();
+                        updateExtraContentButtons();
+
                         fetchConversations();
                     } else {
                         addMessageToChat('Error: Unable to get response from server', false);
@@ -206,7 +322,7 @@
             if (file) {
                 const reader = new FileReader();
                 reader.onload = (e) => {
-                    conversationContent.push({ content: e.target.result, kind: 'file', metadata: { name: file.name, type: file.type } });
+                    addExtraContent('File', e.target.result, file.name);
                 };
                 reader.readAsText(file);
             }
@@ -247,7 +363,7 @@
                 reader.readAsDataURL(audioBlob);
                 reader.onloadend = () => {
                     const base64Audio = reader.result.split(',')[1];
-                    conversationContent.push({ content: base64Audio, kind: 'audio' });
+                    addExtraContent('Audio', base64Audio);
                 };
             });
         }
@@ -313,7 +429,7 @@
         }
 
         async function clearConverationContent() {
-            conversationContent = [];
+            extraContents = [];
         }
 
         newChatButton.addEventListener('click', createNewConversation);
@@ -375,7 +491,7 @@
             canvas.getContext('2d').drawImage(mediaPreview, 0, 0);
             const imageDataUrl = canvas.toDataURL('image/jpeg');
             const base64Image = imageDataUrl.split(',')[1]; // Base64-encoded image data
-            conversationContent.push({ content: base64Image, kind: 'image' });
+            addExtraContent('Image', base64Image);
             closeMediaCapture();
         }
 
@@ -397,7 +513,7 @@
                 reader.readAsDataURL(videoBlob);
                 reader.onloadend = () => {
                     const base64Video = reader.result.split(',')[1];
-                    conversationContent.push({ content: base64Video, kind: 'video' });
+                    addExtraContent('Video', base64Video);
                 };
                 closeMediaCapture();
             });
@@ -444,6 +560,7 @@
         fetchConversations();
         createNewConversation();
         fetchAndPopulateModels();
+        updateExtraContentButtons();
     </script>
 </body>
 </html>

@@ -20,8 +20,8 @@ function generate_llm_response(model_name::String, conv_id::String)
             for extra in message.extras
                 kind, content = extra
                 if kind == "file"
-                    data, metadata = content
-                    full_prompt *= "File at path " * metadata * ":\n" * data * "\nEOF\n\n"
+                    data, file_name = content
+                    full_prompt *= "File at path " * file_name * ":\n" * data * "\nEOF\n\n"
                 elseif kind == "audio"
                     full_prompt *= "Audio transcription:\n" * content * "\nEOF\n\n"
                 else
@@ -39,11 +39,12 @@ function process_extra_content(extras)
     extras_out = []
     for extra in extras
         kind = extra.kind
-        content = extra.content
+        kind = lowercase(kind)
+        content = extra.data
         @show kind
         if kind == "file"
             # Store content
-            name = extra.metadata.name
+            name = extra.fileName
             push!(extras_out, "file" => [name, content])
         elseif kind == "audio"
             # Decode into file
