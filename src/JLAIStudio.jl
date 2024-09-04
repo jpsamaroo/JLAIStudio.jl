@@ -26,6 +26,7 @@ include("model.jl")
 include("agent.jl")
 include("interface.jl")
 include("workflow.jl")
+include("db.jl")
 include("webui.jl")
 
 include("audio.jl")
