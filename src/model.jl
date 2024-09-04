@@ -11,6 +11,12 @@ function load_model(model_name::String)
     return MODELS[model_name]
 end
 
+struct EchoPromptModel <: Model end
+function infer(model::EchoPromptModel, prompt::String)
+    return prompt
+end
+MODELS["echoprompt"] = EchoPromptModel()
+
 struct PTModel <: Model
     schema # TODO: Concrete-ish type
     name::String
