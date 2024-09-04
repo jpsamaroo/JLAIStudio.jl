@@ -28,6 +28,7 @@ include("interface.jl")
 include("workflow.jl")
 include("db.jl")
 include("webui.jl")
+include("readlineui.jl")
 
 include("audio.jl")
 
